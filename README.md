@@ -98,7 +98,7 @@ The MCP server provides the following comprehensive tools for Robot Framework te
 
 The server supports multiple selector templates for different applications:
 
-- **`appLocator`** (default) - For Sauce Demo and similar apps
+- **`appLocator`** (default) - For web apps
 - **`generic`** - Generic web application selectors
 - **`bootstrap`** - Bootstrap-based applications
 
