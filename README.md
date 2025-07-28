@@ -2,6 +2,10 @@
 
 A Model Context Protocol (MCP) server for Robot Framework test automation 
 
+<a href="https://glama.ai/mcp/servers/@sourcefuse/robotframework-mcp">
+  <img width="380" height="200" src="https://glama.ai/mcp/servers/@sourcefuse/robotframework-mcp/badge" alt="Robot Framework Server MCP server" />
+</a>
+
 ## Features
 
 - 🤖 Generate Robot Framework test cases with SeleniumLibrary
