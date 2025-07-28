@@ -1,0 +1,4 @@
+mcp>=1.0.0
+robotframework>=6.0
+selenium>=4.0.0
+robotframework-seleniumlibrary>=6.0

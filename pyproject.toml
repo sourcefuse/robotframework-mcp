@@ -1,0 +1,35 @@
+[project]
+name = "robotframework-mcp"
+version = "1.0.0"
+description = "Robot Framework MCP Server for code generation"
+authors = [
+    {name = "Meenu rani", email = "meenu.rani@sourcefuse.com"}
+]
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["mcp", "selenium", "testing", "robot-framework", "automation"]
+dependencies = [
+    "mcp>=1.0.0",
+    "robotframework>=6.0",
+    "selenium>=4.0.0",
+    "robotframework-seleniumlibrary>=6.0",
+]
+
+[project.scripts]
+robotframework-mcp = "run_mcp:main"
+
+[project.urls]
+Homepage = "https://github.com/sourcefuse/robotframework-MCP"
+Repository = "https://github.com/sourcefuse/robotframework-MCP.git"
+Issues = "https://github.com/sourcefuse/robotframework-MCP/issues"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["mcp_server", "run_mcp"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"*" = ["*.md", "*.txt", "*.json", "*.js", "*.bat", "bin/*", "scripts/*"]

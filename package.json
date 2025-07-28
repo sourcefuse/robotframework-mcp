@@ -1,0 +1,35 @@
+{
+  "name": "robotframework-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server for Robot Framework test automation",
+  "main": "bin/robotframework-mcp.js",
+  "bin": {
+    "robotframework-mcp": "bin/robotframework-mcp.js"
+  },
+  "scripts": {
+      "start": "node bin/robotframework-mcp.js",
+     "test": "python3 mcp_server.py"
+},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sourcefuse/robotframework-MCP.git"
+  },
+  "author": "Meenu Rani <meenu.rani@sourcefuse.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/sourcefuse/robotframework-MCP/issues"
+  },
+  "homepage": "https://github.com/sourcefuse/robotframework-MCP#readme",
+  "engines": {
+    "node": ">=14.0.0",
+    "python": ">=3.10.0"
+  },
+  "files": [
+    "bin/",
+    "mcp_server.py",
+    "run_mcp.py",
+    "requirements.txt",
+    "README.md",
+    "pyproject.toml"
+  ]
+}
