@@ -1,6 +1,6 @@
 # Robot Framework MCP Server
 
-A Model Context Protocol (MCP) server for Robot Framework test automation 
+A Model Context Protocol (MCP) server for Robot Framework test automation with custom features
 
 ## Features
 
@@ -24,7 +24,7 @@ A Model Context Protocol (MCP) server for Robot Framework test automation
 
 ### Method 1: Using npx (Node.js Package Manager)
 
-Add to your MCP client configuration (e.g., `mcp.json` or Claude Desktop settings):
+Add to your MCP client configuration (e.g., `mcp.json`) in your **VS code or VS code insider**:
 
 ```json
 {
@@ -112,7 +112,8 @@ All tools include comprehensive input validation:
 
 ## Credits
 
-** Developer & Creator:** [Meenu Rani](https://github.com/meenurani1)
+** Developer & Creator:**  
+[Meenu Rani](https://github.com/meenurani1)
 - 🚀 Initial concept and architecture design
 - 💻 Core implementation and development
 - 📚 Documentation and examples
