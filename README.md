@@ -110,14 +110,19 @@ All tools include comprehensive input validation:
 - Selector format validation
 - Safe variable substitution in templates
 
-## Credits
 
-** Developer & Creator:**  
-[Meenu Rani](https://github.com/meenurani1)
-- 🚀 Initial concept and architecture design
-- 💻 Core implementation and development
-- 📚 Documentation and examples
-- 🔧 Maintenance and feature development
+🤝 Contributing
+Contributions are welcome!
+To contribute:
+Fork the repository
+
+Create a new branch
+Submit a pull request with a detailed description
+
+📬 Contact
+Name: Meenu Rani
+Email: meenu.rani@sourcefuse.com
+GitHub: meenurani1
 
 ## License
 
