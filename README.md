@@ -13,6 +13,12 @@ A Model Context Protocol (MCP) server for Robot Framework test automation with c
 - 🔄 Data-driven testing templates
 - 🌐 API integration testing capabilities
 
+## Quick Demo Video
+
+
+https://github.com/user-attachments/assets/47ef8f7b-e3f5-413c-b09f-40168a9d4b44
+
+
 ## Prerequisites
 
 - **Python 3.10 or higher**
