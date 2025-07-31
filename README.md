@@ -46,8 +46,30 @@ Add to your MCP client configuration (e.g., `mcp.json`) in your **VS code or VS 
   }
 }
 ```
+### Method 2: Install from PyPI 
 
-### Method 2: Using UV (Recommended - Faster & More Reliable)
+```bash
+# Install the package
+pip3 install robotframework-mcp
+
+# Run the MCP server
+robotframework-mcp
+```
+
+**For MCP Clients (VS code or VS code inside, etc.):**
+
+```json
+{
+  "mcpServers": {
+    "robotframework-mcp": {
+      "command": "robotframework-mcp",
+      "type": "stdio"
+    }
+  }
+}
+```
+
+### Method 3: Using UV 
 
 First install UV:
 ```bash
