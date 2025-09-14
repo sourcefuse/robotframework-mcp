@@ -2,6 +2,7 @@
 const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const os = require('os');
+const fs = require('fs');
 
 // Get the directory where this script is located
 const scriptDir = path.dirname(__filename);
@@ -61,35 +62,52 @@ function checkPython() {
     process.exit(1);
 }
 
+// Find Python executable, preferring .venv if present
+function getPythonExecutable() {
+    const venvPython = path.join(scriptDir, '..', '.venv', 'bin', 'python3');
+    if (fs.existsSync(venvPython)) {
+        console.log('✅ Found virtual environment: .venv');
+        return venvPython;
+    }
+    // Fallback to system Python detection
+    return checkPython();
+}
+
 // Install Python dependencies if needed
 function installDependencies() {
-    const python = checkPython();
+    const python = getPythonExecutable();
     const isWindows = os.platform() === 'win32';
-    
-    console.log('📦 Installing Python dependencies...');
-    console.log(`Using Python: ${python}`);
-    
+
+    if (python.includes('.venv')) {
+        console.log('📦 Installing Python dependencies in .venv...');
+    } else {
+        console.warn('⚠️ No .venv found. It is strongly recommended to use a virtual environment!');
+        console.warn('Run the following commands before using this tool:');
+        console.warn('  python3 -m venv .venv');
+        console.warn('  source .venv/bin/activate');
+        console.warn('Then re-run this command.');
+    }
+
     const install = spawn(python, ['-m', 'pip', 'install', 'mcp', 'selenium', 'robotframework-seleniumlibrary'], {
         stdio: 'inherit',
         shell: isWindows // Use shell on Windows
     });
-    
+
     install.on('close', (code) => {
         if (code === 0) {
             console.log('✅ Dependencies installed successfully');
             startServer();
         } else {
             console.error('❌ Failed to install dependencies');
-            console.error('');
             console.error('Troubleshooting:');
             console.error('  • Ensure Python is properly installed and in PATH');
+            console.error('  • Use a virtual environment (.venv) for best results');
             console.error('  • Try running manually: pip install mcp selenium robotframework-seleniumlibrary');
             console.error('  • Check if you need to use python -m pip instead of pip');
-            console.error('');
             process.exit(1);
         }
     });
-    
+
     install.on('error', (error) => {
         console.error('❌ Error during installation:', error.message);
         process.exit(1);
@@ -98,18 +116,18 @@ function installDependencies() {
 
 // Start the Python MCP server
 function startServer() {
-    const python = checkPython();
+    const python = getPythonExecutable();
     const isWindows = os.platform() === 'win32';
-    
+
     console.log('🚀 Starting Robot Framework MCP server...');
     console.log(`Using Python: ${python}`);
     console.log(`Script path: ${pythonScript}`);
-    
+
     const server = spawn(python, [pythonScript], {
         stdio: 'inherit',
         shell: isWindows // Use shell on Windows
     });
-    
+
     server.on('close', (code) => {
         if (code === 0) {
             console.log('✅ Robot Framework MCP server stopped gracefully');
@@ -117,15 +135,14 @@ function startServer() {
             console.log(`❌ Robot Framework MCP server exited with code ${code}`);
         }
     });
-    
+
     server.on('error', (error) => {
         console.error('❌ Error starting Robot Framework MCP server:', error.message);
-        console.error('');
         console.error('Troubleshooting:');
         console.error('  • Check if mcp_server.py exists in the project directory');
         console.error('  • Ensure all Python dependencies are installed');
+        console.error('  • Use a virtual environment (.venv) for best results');
         console.error('  • Try running manually: python mcp_server.py');
-        console.error('');
     });
 }
 
