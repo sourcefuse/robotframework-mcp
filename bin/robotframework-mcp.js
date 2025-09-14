@@ -65,6 +65,8 @@ function checkPython() {
 // Find Python executable, preferring .venv if present
 function getPythonExecutable() {
     const venvPython = path.join(scriptDir, '..', '.venv', 'bin', 'python3');
+    console.log('Script dir path: ',scriptDir);
+    console.log('virtual environment path: ',venvPython);
     if (fs.existsSync(venvPython)) {
         console.log('✅ Found virtual environment: .venv');
         return venvPython;
