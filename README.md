@@ -43,7 +43,8 @@ Add to your MCP client configuration (e.g., `mcp.json`) in your **VS code or VS 
       "command": "npx",
       "args": [
         "-y",
-        "git+https://github.com/sourcefuse/robotframework-MCP.git"
+        "git+https://github.com/sourcefuse/robotframework-MCP.git",
+        "--project-dir=/path/to/your/project"
       ],
       "type": "stdio"
     }
@@ -99,6 +100,57 @@ Then add to your MCP configuration:
         "python",
         "-c",
         "import mcp_server; mcp_server.main()"
+      ],
+      "type": "stdio"
+    }
+  }
+}
+```
+
+### Method 4: Clone Repository (Development/Local Setup)
+
+For development or when you want to modify the source code:
+
+```bash
+# Clone the repository
+git clone https://github.com/sourcefuse/robotframework-MCP.git
+cd robotframework-MCP
+
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run the MCP server directly
+python mcp_server.py
+```
+
+**For MCP Clients (VS Code, Claude Desktop, etc.):**
+
+```json
+{
+  "servers": {
+    "robotframework-mcp": {
+      "command": "python",
+      "args": ["/path/to/cloned/robotframework-MCP/mcp_server.py"],
+      "type": "stdio"
+    }
+  }
+}
+```
+
+Or using the Node.js wrapper from cloned repo:
+
+```json
+{
+  "servers": {
+    "robotframework-mcp": {
+      "command": "node",
+      "args": [
+        "/path/to/cloned/robotframework-MCP/bin/robotframework-mcp.js",
+        "--project-dir=/path/to/your/project"
       ],
       "type": "stdio"
     }
