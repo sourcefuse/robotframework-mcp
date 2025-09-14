@@ -5,9 +5,13 @@ const os = require('os');
 const fs = require('fs');
 
 // Get the directory where this script is located
-
-const projectRoot = process.cwd();
-const pythonScript = path.join(projectRoot, 'mcp_server.py');
+const scriptDir = path.dirname(__filename);
+// Check for --project-dir argument first, then environment variables, then fallback
+const projectDirArg = process.argv.find(arg => arg.startsWith('--project-dir='));
+const projectRoot = projectDirArg 
+    ? projectDirArg.split('=')[1] 
+    : (process.env.PWD || process.env.INIT_CWD || process.cwd());
+const pythonScript = path.join(scriptDir, '..', 'mcp_server.py');
 
 
 // Check if Python is available
@@ -66,9 +70,15 @@ function checkPython() {
 
 // Find Python executable, preferring .venv if present
 function getPythonExecutable() {
+    console.log('🔍 Debug info:');
+    console.log('  process.cwd():', process.cwd());
+    console.log('  process.env.PWD:', process.env.PWD);
+    console.log('  process.env.INIT_CWD:', process.env.INIT_CWD);
+    console.log('  projectRoot:', projectRoot);
+    
     const venvPython = path.join(projectRoot, '.venv', 'bin', 'python3');
-    console.log('Script dir path: ',projectRoot);
-    console.log('virtual environment path: ',venvPython);
+    console.log('Script dir path: ', projectRoot);
+    console.log('virtual environment path: ', venvPython);
     if (fs.existsSync(venvPython)) {
         console.log('✅ Found virtual environment: .venv');
         return venvPython;
