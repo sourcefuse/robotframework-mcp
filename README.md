@@ -44,7 +44,7 @@ Add to your MCP client configuration (e.g., `mcp.json`) in your **VS code or VS 
       "args": [
         "-y",
         "git+https://github.com/sourcefuse/robotframework-MCP.git",
-        "--project-dir=/path/to/your/project"
+        "--project-dir=/path/to/your/project"  //Optional- If you want to run the mcp for local virtual environment or specific project only
       ],
       "type": "stdio"
     }
