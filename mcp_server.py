@@ -1,7 +1,20 @@
 import re
+import datetime
+from pathlib import Path
 from string import Template
 from urllib.parse import urlparse
 from mcp.server.fastmcp import FastMCP
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.firefox.options import Options as FirefoxOptions
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import (
+    TimeoutException,
+    NoSuchElementException,
+    WebDriverException,
+)
 
 # Create an enhanced MCP server with validation and configurable selectors
 mcp = FastMCP("Robot framework MCP Server")
@@ -109,6 +122,273 @@ SELECTOR_CONFIGS = {
         "logout_button": "css=.btn-outline-secondary"
     }
 }
+
+
+# ---------------------------------------------------------------------------
+# Live browser session — module-level so all tools share the same driver
+# ---------------------------------------------------------------------------
+_driver: webdriver.Remote | None = None
+
+
+def _resolve_selector(selector: str) -> tuple[str, str]:
+    """Parse Robot-Framework-style selector prefix into (By.*, value)."""
+    prefixes = {
+        "id=": By.ID,
+        "name=": By.NAME,
+        "class=": By.CLASS_NAME,
+        "css=": By.CSS_SELECTOR,
+        "xpath=": By.XPATH,
+        "tag=": By.TAG_NAME,
+        "link=": By.LINK_TEXT,
+        "partial_link=": By.PARTIAL_LINK_TEXT,
+    }
+    for prefix, by in prefixes.items():
+        if selector.startswith(prefix):
+            return by, selector[len(prefix):]
+    return By.CSS_SELECTOR, selector
+
+
+def _require_driver() -> "webdriver.Remote":
+    """Return the active driver or raise a clear error."""
+    if _driver is None:
+        raise WebDriverException(
+            "No browser session is open. Call browser_launch first."
+        )
+    return _driver
+
+
+# ---------------------------------------------------------------------------
+# Single-action browser tools
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+def browser_launch(
+    url: str,
+    browser: str = "Chrome",
+    headless: bool = False,
+) -> str:
+    """Launch a browser, navigate to url, and start a live session.
+
+    browser: 'Chrome' (default) or 'Firefox'.
+    headless: run without a visible window when True.
+    Must be called before any other browser_* tool.
+    """
+    global _driver
+
+    try:
+        validated_url = InputValidator.validate_url(url)
+
+        # Close any existing session cleanly
+        if _driver is not None:
+            try:
+                _driver.quit()
+            except Exception:
+                pass
+            _driver = None
+
+        browser_lower = browser.strip().lower()
+
+        if browser_lower == "firefox":
+            opts = FirefoxOptions()
+            if headless:
+                opts.add_argument("--headless")
+            _driver = webdriver.Firefox(options=opts)
+        else:
+            opts = ChromeOptions()
+            if headless:
+                opts.add_argument("--headless=new")
+                opts.add_argument("--no-sandbox")
+                opts.add_argument("--disable-dev-shm-usage")
+                opts.add_argument("--disable-gpu")
+                opts.add_argument("--remote-debugging-port=9222")
+                opts.add_argument("--window-size=1920,1080")
+            service = webdriver.ChromeService()
+            _driver = webdriver.Chrome(options=opts, service=service)
+
+        _driver.maximize_window()
+        _driver.get(validated_url)
+
+        return (
+            f"Browser launched: {browser} (headless={headless})\n"
+            f"URL: {validated_url}\n"
+            f"Title: {_driver.title}\n"
+            f"Session ID: {_driver.session_id}"
+        )
+
+    except ValidationError as e:
+        return f"VALIDATION ERROR: {str(e)}"
+    except WebDriverException as e:
+        _driver = None
+        return f"BROWSER ERROR: {str(e)}"
+    except Exception as e:
+        _driver = None
+        return f"UNEXPECTED ERROR: {str(e)}"
+
+
+@mcp.tool()
+def browser_navigate(url: str) -> str:
+    """Navigate the open browser session to a new URL."""
+    try:
+        driver = _require_driver()
+        validated_url = InputValidator.validate_url(url)
+        driver.get(validated_url)
+        return f"Navigated to: {validated_url}\nTitle: {driver.title}"
+    except ValidationError as e:
+        return f"VALIDATION ERROR: {str(e)}"
+    except WebDriverException as e:
+        return f"BROWSER ERROR: {str(e)}"
+    except Exception as e:
+        return f"UNEXPECTED ERROR: {str(e)}"
+
+
+@mcp.tool()
+def browser_click(selector: str, timeout: int = 10) -> str:
+    """Click an element identified by selector.
+
+    Selector formats: id=, name=, css=, xpath=, class=, tag=, link=, partial_link=
+    or plain CSS (default).
+    timeout: seconds to wait for the element to be clickable.
+    """
+    try:
+        driver = _require_driver()
+        by, value = _resolve_selector(selector)
+        element = WebDriverWait(driver, timeout).until(
+            EC.element_to_be_clickable((by, value))
+        )
+        element.click()
+        return f"Clicked element: {selector}"
+    except TimeoutException:
+        return f"TIMEOUT: Element not clickable within {timeout}s — {selector}"
+    except NoSuchElementException:
+        return f"NOT FOUND: No element matches — {selector}"
+    except WebDriverException as e:
+        return f"BROWSER ERROR: {str(e)}"
+    except Exception as e:
+        return f"UNEXPECTED ERROR: {str(e)}"
+
+
+@mcp.tool()
+def browser_send_keys(selector: str, text: str, clear_first: bool = True, timeout: int = 10) -> str:
+    """Type text into an input element.
+
+    clear_first: clear existing content before typing (default True).
+    Selector formats: id=, name=, css=, xpath=, class=, tag= or plain CSS.
+    """
+    try:
+        driver = _require_driver()
+        by, value = _resolve_selector(selector)
+        element = WebDriverWait(driver, timeout).until(
+            EC.visibility_of_element_located((by, value))
+        )
+        if clear_first:
+            element.clear()
+        element.send_keys(text)
+        return f"Typed into {selector}: '{text}'"
+    except TimeoutException:
+        return f"TIMEOUT: Element not visible within {timeout}s — {selector}"
+    except NoSuchElementException:
+        return f"NOT FOUND: No element matches — {selector}"
+    except WebDriverException as e:
+        return f"BROWSER ERROR: {str(e)}"
+    except Exception as e:
+        return f"UNEXPECTED ERROR: {str(e)}"
+
+
+@mcp.tool()
+def browser_get_text(selector: str, timeout: int = 10) -> str:
+    """Return the visible text content of an element."""
+    try:
+        driver = _require_driver()
+        by, value = _resolve_selector(selector)
+        element = WebDriverWait(driver, timeout).until(
+            EC.visibility_of_element_located((by, value))
+        )
+        text = element.text
+        return f"Text of {selector}: '{text}'"
+    except TimeoutException:
+        return f"TIMEOUT: Element not visible within {timeout}s — {selector}"
+    except NoSuchElementException:
+        return f"NOT FOUND: No element matches — {selector}"
+    except WebDriverException as e:
+        return f"BROWSER ERROR: {str(e)}"
+    except Exception as e:
+        return f"UNEXPECTED ERROR: {str(e)}"
+
+
+@mcp.tool()
+def browser_wait_for_element(selector: str, state: str = "visible", timeout: int = 10) -> str:
+    """Wait for an element to reach a given state.
+
+    state: 'visible' (default), 'present', 'clickable', or 'hidden'.
+    Returns confirmation when the condition is met or a timeout error.
+    """
+    try:
+        driver = _require_driver()
+        by, value = _resolve_selector(selector)
+
+        conditions = {
+            "visible": EC.visibility_of_element_located((by, value)),
+            "present": EC.presence_of_element_located((by, value)),
+            "clickable": EC.element_to_be_clickable((by, value)),
+            "hidden": EC.invisibility_of_element_located((by, value)),
+        }
+
+        condition = conditions.get(state.lower())
+        if condition is None:
+            return f"ERROR: Unknown state '{state}'. Use: visible, present, clickable, hidden."
+
+        WebDriverWait(driver, timeout).until(condition)
+        return f"Element is {state}: {selector}"
+    except TimeoutException:
+        return f"TIMEOUT: Element did not reach state '{state}' within {timeout}s — {selector}"
+    except WebDriverException as e:
+        return f"BROWSER ERROR: {str(e)}"
+    except Exception as e:
+        return f"UNEXPECTED ERROR: {str(e)}"
+
+
+@mcp.tool()
+def browser_screenshot(filename: str = "") -> str:
+    """Take a screenshot of the current browser page.
+
+    filename: optional path/name for the PNG file.
+    If omitted, a timestamped file is created in the current directory.
+    Returns the absolute path of the saved screenshot.
+    """
+    try:
+        driver = _require_driver()
+
+        if not filename:
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"screenshot_{ts}.png"
+
+        path = Path(filename).resolve()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        driver.save_screenshot(str(path))
+        return f"Screenshot saved: {path}"
+    except WebDriverException as e:
+        return f"BROWSER ERROR: {str(e)}"
+    except Exception as e:
+        return f"UNEXPECTED ERROR: {str(e)}"
+
+
+@mcp.tool()
+def browser_close() -> str:
+    """Close the active browser session."""
+    global _driver
+    try:
+        if _driver is None:
+            return "No browser session is currently open."
+        _driver.quit()
+        _driver = None
+        return "Browser session closed."
+    except WebDriverException as e:
+        _driver = None
+        return f"BROWSER ERROR while closing: {str(e)}"
+    except Exception as e:
+        _driver = None
+        return f"UNEXPECTED ERROR: {str(e)}"
+
 
 @mcp.tool()
 def create_login_test_case(url: str, username: str, password: str, template_type: str = "appLocator") -> str:
@@ -698,7 +978,6 @@ Take Element Screenshot With Highlight
     Execute JavaScript    arguments[0].style.border = '';    ARGUMENTS    ${locator}
     Log    Highlighted element screenshot saved: ${filename}
 """
-    return template
 
 @mcp.tool()
 def create_performance_monitoring_test() -> str:
