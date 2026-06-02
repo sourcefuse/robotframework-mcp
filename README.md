@@ -16,6 +16,8 @@ A Model Context Protocol (MCP) server for Robot Framework test automation with c
 - 📊 Performance monitoring and metrics collection
 - 🔄 Data-driven testing templates
 - 🌐 API integration testing capabilities
+- 🖥️ Live browser control — launch, click, type, screenshot without writing `.robot` files
+- 🚀 CI/CD pipeline generation for GitHub Actions
 
 ## Quick Demo Video
 
@@ -177,6 +179,58 @@ The MCP server provides the following comprehensive tools for Robot Framework te
 
 ### 🔍 Validation & Syntax
 - **`validate_robot_framework_syntax(robot_code)`** - Validate Robot Framework syntax and provide improvement suggestions
+
+### 🖥️ Live Browser Control
+
+Drive a real browser directly — no `.robot` file needed. All tools share a persistent session and support Robot Framework-style selector prefixes (`id=`, `css=`, `xpath=`, `name=`, `class=`, `tag=`, `link=`, `partial_link=`).
+
+| Tool | Description |
+|---|---|
+| **`browser_launch(url, browser="Chrome", headless=False)`** | Open Chrome or Firefox and navigate to a URL |
+| **`browser_navigate(url)`** | Go to a new URL in the active session |
+| **`browser_click(selector, timeout=10)`** | Click an element, waits until it is clickable |
+| **`browser_send_keys(selector, text, clear_first=True, timeout=10)`** | Type into an input field |
+| **`browser_get_text(selector, timeout=10)`** | Read visible text from an element |
+| **`browser_wait_for_element(selector, state="visible", timeout=10)`** | Wait for `visible`, `present`, `clickable`, or `hidden` |
+| **`browser_screenshot(filename="")`** | Save a PNG screenshot, returns the file path |
+| **`browser_close()`** | Quit the browser and clean up the session |
+
+**Example — AI-driven login flow:**
+```python
+browser_launch("https://example.com")
+browser_send_keys("id=username", "admin")
+browser_send_keys("id=password", "secret")
+browser_click("css=button[type='submit']")
+browser_screenshot("results/after_login.png")
+browser_close()
+```
+
+> **Note:** ChromeDriver must match your installed Chrome version. Update with `brew upgrade chromedriver` (macOS) or download from [googlechromelabs.github.io/chrome-for-testing](https://googlechromelabs.github.io/chrome-for-testing/).
+
+### 🚀 CI/CD Pipeline Generation
+
+- **`create_cicd_pipeline(project_name, python_version, test_directory, trigger_branches, schedule, output_dir, requirements_file)`** - Generate a GitHub Actions workflow file ready to drop into `.github/workflows/`
+
+The generated workflow:
+- Triggers on push and pull requests to specified branches
+- Supports optional cron schedule (e.g. `"0 9 * * 1-5"` for weekdays at 09:00 UTC)
+- Auto-detects the Python version from the current environment (can be overridden)
+- Sets up Chrome in headless mode on the runner
+- Installs from `requirements.txt` if present, falls back to core packages
+- Uploads the full `results/` folder as a build artifact (30-day retention)
+- Parses `output.xml` and reports pass/fail counts; fails the job if any test fails
+
+**Example:**
+```python
+create_cicd_pipeline(
+    project_name="my-rf-tests",
+    trigger_branches="main, develop",
+    schedule="0 9 * * 1-5",   # weekdays 09:00 UTC
+    test_directory="tests/",
+)
+```
+
+Save the output to `.github/workflows/robot-tests.yml` in your repository.
 
 ### 📋 Template Options
 
