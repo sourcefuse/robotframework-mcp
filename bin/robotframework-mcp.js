@@ -6,33 +6,59 @@ const fs = require('fs');
 
 // Get the directory where this script is located
 const scriptDir = path.dirname(__filename);
+const packageRoot = path.join(scriptDir, '..');
+
 // Check for --project-dir argument first, then environment variables, then fallback
 const projectDirArg = process.argv.find(arg => arg.startsWith('--project-dir='));
-const projectRoot = projectDirArg 
-    ? projectDirArg.split('=')[1] 
+const projectRoot = projectDirArg
+    ? projectDirArg.split('=')[1]
     : (process.env.PWD || process.env.INIT_CWD || process.cwd());
-const pythonScript = path.join(scriptDir, '..', 'mcp_server.py');
 
+// Which Robot Framework library backend to run: "selenium" (default, unchanged
+// behavior) or "browser" (Playwright-based Browser library, bundled in packageRoot/browser).
+const libraryArg = process.argv.find(arg => arg.startsWith('--library='));
+const library = libraryArg
+    ? libraryArg.split('=')[1]
+    : (process.env.ROBOTFRAMEWORK_MCP_LIBRARY || 'selenium');
+
+const SUPPORTED_LIBRARIES = ['selenium', 'browser'];
+if (!SUPPORTED_LIBRARIES.includes(library)) {
+    console.error(`❌ Unknown --library="${library}". Supported values: ${SUPPORTED_LIBRARIES.join(', ')}`);
+    process.exit(1);
+}
+
+// --setup: install/prepare the selected backend, then exit without starting the
+// MCP server. Lets users run the slow first-time setup (e.g. `rfbrowser init`,
+// which downloads Playwright browsers) from a terminal instead of inside an MCP
+// client, where it would exceed the client's startup timeout.
+const setupOnly = process.argv.includes('--setup');
+
+// stdout is the MCP JSON-RPC channel once the server runs, so the launcher and
+// its setup subprocesses must never write to it: logs go to stderr (console.error)
+// and installer output is redirected to stderr (fd 2).
+const SETUP_STDIO = ['ignore', 2, 2];
+
+const pythonScript = path.join(packageRoot, 'mcp_server.py');
 
 // Check if Python is available
 function checkPython() {
     // Windows-specific Python commands
     const isWindows = os.platform() === 'win32';
-    const pythonCommands = isWindows 
+    const pythonCommands = isWindows
         ? ['py', 'python', 'python3', 'python.exe']
         : ['python3', 'python'];
-    
+
     for (const cmd of pythonCommands) {
         try {
-            const result = spawnSync(cmd, ['--version'], { 
+            const result = spawnSync(cmd, ['--version'], {
                 stdio: 'pipe',
                 shell: isWindows // Use shell on Windows
             });
-            
+
             if (result.status === 0) {
                 const output = result.stdout.toString() || result.stderr.toString();
-                console.log(`Found Python: ${cmd} - ${output.trim()}`);
-                
+                console.error(`Found Python: ${cmd} - ${output.trim()}`);
+
                 // Check Python version
                 const versionMatch = output.match(/Python (\d+)\.(\d+)/);
                 if (versionMatch) {
@@ -41,7 +67,7 @@ function checkPython() {
                     if (major >= 3 && minor >= 10) {
                         return cmd;
                     } else {
-                        console.warn(`Python ${major}.${minor} found, but Python 3.10+ is required`);
+                        console.error(`Python ${major}.${minor} found, but Python 3.10+ is required`);
                     }
                 }
             }
@@ -50,7 +76,7 @@ function checkPython() {
             continue;
         }
     }
-    
+
     console.error('❌ Python 3.10+ not found.');
     console.error('');
     console.error('Please install Python 3.10 or higher:');
@@ -70,17 +96,17 @@ function checkPython() {
 
 // Find Python executable, preferring .venv if present
 function getPythonExecutable() {
-    console.log('🔍 Debug info:');
-    console.log('  process.cwd():', process.cwd());
-    console.log('  process.env.PWD:', process.env.PWD);
-    console.log('  process.env.INIT_CWD:', process.env.INIT_CWD);
-    console.log('  projectRoot:', projectRoot);
-    
+    console.error('🔍 Debug info:');
+    console.error('  process.cwd():', process.cwd());
+    console.error('  process.env.PWD:', process.env.PWD);
+    console.error('  process.env.INIT_CWD:', process.env.INIT_CWD);
+    console.error('  projectRoot:', projectRoot);
+
     const venvPython = path.join(projectRoot, '.venv', 'bin', 'python3');
-    console.log('Script dir path: ', projectRoot);
-    console.log('virtual environment path: ', venvPython);
+    console.error('Script dir path: ', projectRoot);
+    console.error('virtual environment path: ', venvPython);
     if (fs.existsSync(venvPython)) {
-        console.log('✅ Found virtual environment: .venv');
+        console.error('✅ Found virtual environment: .venv');
         return venvPython;
     }
     // Fallback to system Python detection
@@ -93,24 +119,24 @@ function installDependencies() {
     const isWindows = os.platform() === 'win32';
 
     if (python.includes('.venv')) {
-        console.log('📦 Installing Python dependencies in .venv...');
+        console.error('📦 Installing Python dependencies in .venv...');
     } else {
-        console.warn('⚠️ No .venv found. It is strongly recommended to use a virtual environment!');
-        console.warn('Run the following commands before using this tool:');
-        console.warn('  python3 -m venv .venv');
-        console.warn('  source .venv/bin/activate');
-        console.warn('Then re-run this command.');
+        console.error('⚠️ No .venv found. It is strongly recommended to use a virtual environment!');
+        console.error('Run the following commands before using this tool:');
+        console.error('  python3 -m venv .venv');
+        console.error('  source .venv/bin/activate');
+        console.error('Then re-run this command.');
     }
 
     const install = spawn(python, ['-m', 'pip', 'install', 'mcp', 'selenium', 'robotframework-seleniumlibrary'], {
-        stdio: 'inherit',
+        stdio: SETUP_STDIO,
         shell: isWindows // Use shell on Windows
     });
 
     install.on('close', (code) => {
         if (code === 0) {
-            console.log('✅ Dependencies installed successfully');
-            startServer();
+            console.error('✅ Dependencies installed successfully');
+            if (!setupOnly) startServer();
         } else {
             console.error('❌ Failed to install dependencies');
             console.error('Troubleshooting:');
@@ -133,9 +159,9 @@ function startServer() {
     const python = getPythonExecutable();
     const isWindows = os.platform() === 'win32';
 
-    console.log('🚀 Starting Robot Framework MCP server...');
-    console.log(`Using Python: ${python}`);
-    console.log(`Script path: ${pythonScript}`);
+    console.error('🚀 Starting Robot Framework MCP server...');
+    console.error(`Using Python: ${python}`);
+    console.error(`Script path: ${pythonScript}`);
 
     const server = spawn(python, [pythonScript], {
         stdio: 'inherit',
@@ -144,9 +170,9 @@ function startServer() {
 
     server.on('close', (code) => {
         if (code === 0) {
-            console.log('✅ Robot Framework MCP server stopped gracefully');
+            console.error('✅ Robot Framework MCP server stopped gracefully');
         } else {
-            console.log(`❌ Robot Framework MCP server exited with code ${code}`);
+            console.error(`❌ Robot Framework MCP server exited with code ${code}`);
         }
     });
 
@@ -160,9 +186,99 @@ function startServer() {
     });
 }
 
+// --- Browser (Playwright) library backend ------------------------------------
+// Bundled under packageRoot/browser with its own .venv, since robotframework-browser
+// needs an extra "rfbrowser init" step (downloads a Node side-car + Playwright
+// browsers) that end users shouldn't have to run by hand.
+
+const browserRoot = path.join(packageRoot, 'browser');
+const browserVenvPython = path.join(browserRoot, '.venv', 'bin', 'python3');
+
+function isBrowserBackendReady() {
+    if (!fs.existsSync(browserVenvPython)) return false;
+    const check = spawnSync(browserVenvPython, ['-c', 'import rf_browser_mcp'], { stdio: 'pipe' });
+    return check.status === 0;
+}
+
+function setupBrowserBackend(onReady) {
+    const isWindows = os.platform() === 'win32';
+    console.error('📦 Setting up Browser-library backend (first run only)...');
+
+    const venvCmd = fs.existsSync(browserVenvPython) ? null : checkPython();
+    const steps = [];
+    if (venvCmd) {
+        steps.push(() => spawnSync(venvCmd, ['-m', 'venv', path.join(browserRoot, '.venv')], { stdio: SETUP_STDIO, shell: isWindows }));
+    }
+    steps.push(() => spawnSync(browserVenvPython, ['-m', 'pip', 'install', '-q', '-e', browserRoot], { stdio: SETUP_STDIO, shell: isWindows }));
+    steps.push(() => spawnSync(path.join(browserRoot, '.venv', 'bin', 'rfbrowser'), ['init'], { stdio: SETUP_STDIO, shell: isWindows }));
+
+    for (const step of steps) {
+        const result = step();
+        if (!result || result.status !== 0) {
+            console.error('❌ Failed to set up the Browser-library backend.');
+            console.error(`   Try running manually inside ${browserRoot}:`);
+            console.error('     python3 -m venv .venv && .venv/bin/pip install -e . && .venv/bin/rfbrowser init');
+            process.exit(1);
+        }
+    }
+
+    console.error('✅ Browser-library backend ready');
+    onReady();
+}
+
+function startBrowserServer() {
+    const isWindows = os.platform() === 'win32';
+    console.error('🚀 Starting Robot Framework MCP server (Browser library)...');
+    console.error(`Using Python: ${browserVenvPython}`);
+
+    const server = spawn(browserVenvPython, ['-m', 'rf_browser_mcp.server'], {
+        cwd: browserRoot,
+        stdio: 'inherit',
+        shell: isWindows
+    });
+
+    server.on('close', (code) => {
+        if (code === 0) {
+            console.error('✅ Robot Framework MCP server stopped gracefully');
+        } else {
+            console.error(`❌ Robot Framework MCP server exited with code ${code}`);
+        }
+    });
+
+    server.on('error', (error) => {
+        console.error('❌ Error starting Robot Framework MCP server:', error.message);
+        console.error('Troubleshooting:');
+        console.error(`  • Check that ${browserRoot} has a working .venv`);
+        console.error('  • Try running manually: .venv/bin/python -m rf_browser_mcp.server (from the browser/ dir)');
+    });
+}
+
+function runBrowserLibrary() {
+    if (setupOnly) {
+        if (isBrowserBackendReady()) {
+            console.error('✅ Browser-library backend already set up');
+        } else {
+            setupBrowserBackend(() => {});
+        }
+        return;
+    }
+    if (isBrowserBackendReady()) {
+        startBrowserServer();
+    } else {
+        console.error('⚠️ Browser-library backend is not set up yet; setting it up now (can take a few minutes).');
+        console.error('   If your MCP client times out, run this once in a terminal and restart the client:');
+        console.error('     npx -y robotframework-mcp-server --library=browser --setup');
+        setupBrowserBackend(startBrowserServer);
+    }
+}
+
 // Main execution
 try {
-    installDependencies();
+    if (library === 'browser') {
+        runBrowserLibrary();
+    } else {
+        installDependencies();
+    }
 } catch (error) {
     console.error('Error:', error);
     process.exit(1);
