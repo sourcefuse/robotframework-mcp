@@ -1,7 +1,7 @@
 {
-  "name": "robotframework-mcp",
-  "version": "1.0.0",
-  "description": "MCP Server for Robot Framework test automation",
+  "name": "robotframework-mcp-server",
+  "version": "1.1.0",
+  "description": "MCP Server for Robot Framework test automation (Selenium and Playwright/Browser library backends)",
   "main": "bin/robotframework-mcp.js",
   "bin": {
     "robotframework-mcp": "bin/robotframework-mcp.js"
@@ -30,6 +30,11 @@
     "run_mcp.py",
     "requirements.txt",
     "README.md",
-    "pyproject.toml"
+    "pyproject.toml",
+    "browser/src/",
+    "browser/pyproject.toml",
+    "browser/README.md",
+    "!**/__pycache__/**",
+    "!**/*.pyc"
   ]
 }

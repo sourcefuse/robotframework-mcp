@@ -1,13 +1,33 @@
 # Robot Framework MCP Server
 
-A Model Context Protocol (MCP) server for Robot Framework test automation with custom features
+A Model Context Protocol (MCP) server for Robot Framework test automation, with two interchangeable browser-automation backends: **SeleniumLibrary** and **Playwright (Robot Framework Browser library)**.
 
 <a href="https://glama.ai/mcp/servers/@sourcefuse/robotframework-mcp">
   <img width="380" height="200" src="https://glama.ai/mcp/servers/@sourcefuse/robotframework-mcp/badge" alt="Robot Framework Server MCP server" />
 </a>
 
+## 🎭 Playwright / Browser Library Support
+
+Alongside the original SeleniumLibrary tooling, this server now ships a **Playwright-powered backend** using Robot Framework's [Browser library](https://robotframework-browser.org/) — the modern, actively-developed, high-demand choice for browser automation (auto-wait, multi-browser support for Chromium/Firefox/WebKit, faster and more reliable than Selenium for most workflows).
+
+Switch backends with a single flag — no separate install to manage, it's bundled in this package:
+
+```bash
+npx -y robotframework-mcp-server --library=browser    # Playwright / Browser library
+npx -y robotframework-mcp-server --library=selenium   # SeleniumLibrary (default)
+```
+
+First run with `--library=browser` bootstraps its own environment automatically (installs deps + `rfbrowser init`, one-time, a couple of minutes). Because that can exceed an MCP client's startup timeout, it's best to run the setup once from a terminal first:
+
+```bash
+npx -y robotframework-mcp-server --library=browser --setup   # prepare the backend, then exit
+```
+
+See "Browser Library (Playwright) Tools" below for the full tool list.
+
 ## Features
 
+- 🎭 **Playwright / Browser library backend** — modern, auto-waiting, multi-browser (Chromium/Firefox/WebKit) automation, selectable with `--library=browser`
 - 🤖 Generate Robot Framework test cases with SeleniumLibrary
 - 📄 Create page object models for web testing
 - ⚡ Advanced Selenium keywords for common web interactions
@@ -34,6 +54,13 @@ https://github.com/user-attachments/assets/47ef8f7b-e3f5-413c-b09f-40168a9d4b44
 
 ## Installation & Usage
 
+This server has two interchangeable backends, selected with `--library`:
+
+- **`selenium`** (default) — SeleniumLibrary-based code generation + live browser control tools.
+- **`browser`** — Playwright-based Robot Framework [Browser library](https://robotframework-browser.org/) tools. Self-contained: on first run it creates its own `.venv` under `browser/` and runs `rfbrowser init` automatically (downloads Playwright browsers, one-time, a couple of minutes).
+
+> **`--library` support by install method:** the flag is only wired up through the Node entrypoint (`bin/robotframework-mcp.js`), so it works with **Method 1 (npx)** and the Node-wrapper variant of **Method 4**. **Method 2 (PyPI)**, **Method 3 (UV)**, and the plain `python mcp_server.py` variant of Method 4 call the Selenium backend directly and only support `selenium` — use Method 1 or the Method 4 Node wrapper if you want the Playwright/Browser library backend.
+
 ### Method 1: Using npx (Node.js Package Manager)
 
 Add to your MCP client configuration (e.g., `mcp.json`) in your **VS code or VS code insider**:
@@ -45,15 +72,18 @@ Add to your MCP client configuration (e.g., `mcp.json`) in your **VS code or VS 
       "command": "npx",
       "args": [
         "-y",
-        "git+https://github.com/sourcefuse/robotframework-MCP.git",
-        "--project-dir=/path/to/your/project"  //Optional- If you want to run the mcp for local virtual environment or specific project only
+        "robotframework-mcp-server",
+        "--project-dir=/path/to/your/project",  //Optional- If you want to run the mcp for local virtual environment or specific project only
+        "--library=browser"  //Optional- "selenium" (default) or "browser" (Playwright)
       ],
       "type": "stdio"
     }
   }
 }
 ```
-### Method 2: Install from PyPI 
+### Method 2: Install from PyPI
+
+> Selenium backend only — `--library` is not supported here.
 
 ```bash
 # Install the package
@@ -76,7 +106,9 @@ robotframework-mcp
 }
 ```
 
-### Method 3: Using UV 
+### Method 3: Using UV
+
+> Selenium backend only — `--library` is not supported here.
 
 First install UV:
 ```bash
@@ -125,11 +157,11 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
-# Run the MCP server directly
+# Run the MCP server directly (Selenium backend only)
 python mcp_server.py
 ```
 
-**For MCP Clients (VS Code, Claude Desktop, etc.):**
+**For MCP Clients (VS Code, Claude Desktop, etc.) — Selenium backend only, `--library` not supported:**
 
 ```json
 {
@@ -143,7 +175,7 @@ python mcp_server.py
 }
 ```
 
-Or using the Node.js wrapper from cloned repo:
+Or using the Node.js wrapper from cloned repo — this variant supports `--library=selenium|browser`:
 
 ```json
 {
@@ -152,7 +184,8 @@ Or using the Node.js wrapper from cloned repo:
       "command": "node",
       "args": [
         "/path/to/cloned/robotframework-MCP/bin/robotframework-mcp.js",
-        "--project-dir=/path/to/your/project"
+        "--project-dir=/path/to/your/project",
+        "--library=browser"
       ],
       "type": "stdio"
     }
@@ -163,6 +196,24 @@ Or using the Node.js wrapper from cloned repo:
 ## Available Tools
 
 The MCP server provides the following comprehensive tools for Robot Framework test automation:
+
+### 🎭 Browser Library (Playwright) Tools — `--library=browser`
+
+Available only when the server is started with `--library=browser`. Each tool is a thin wrapper around a real Robot Framework [Browser library](https://robotframework-browser.org/) keyword, run against a single persistent session.
+
+| Tool | Description |
+|---|---|
+| **`open_browser(url, browser="chromium", headless=True)`** | Launch a browser (`chromium`, `firefox`, or `webkit`) |
+| **`new_page(url)`** / **`close_page()`** / **`close_browser()`** | Manage pages and the browser session |
+| **`go_to(url)`**, **`get_url()`**, **`get_title()`** | Navigation |
+| **`click(selector)`**, **`fill_text`**, **`type_text`**, **`clear_text`**, **`press_keys`** | Interactions |
+| **`check_checkbox`** / **`uncheck_checkbox`** / **`select_options_by`** | Form controls |
+| **`get_text`**, **`get_attribute`**, **`get_element_count`** | Reading page content |
+| **`wait_for_elements_state(selector, state="visible")`** | Wait for an element state |
+| **`take_screenshot`**, **`evaluate_javascript`** | Screenshots & JS |
+| **`run_keyword(name, args)`** | Escape hatch — run any Browser-library keyword by name |
+
+The following tools are available with the default `--library=selenium` backend:
 
 ### 🔧 Core Test Generation
 - **`create_login_test_case(url, username, password, template_type="appLocator")`** - Generate validated login test with configurable selectors
