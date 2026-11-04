@@ -20,6 +20,11 @@ class KeywordError(Exception):
     """Raised when a Browser-library keyword call fails or times out."""
 
 
+class KeywordTimeout(KeywordError):
+    """Raised when the bridge stops waiting for a keyword. The keyword may
+    still be running on the RF thread, so the page state is unknown."""
+
+
 class _ReadyListener:
     """RF listener (v3 API) used only to detect the moment our one test
     actually starts running -- i.e. after all suite-level library imports
@@ -110,7 +115,7 @@ class RobotBridge:
                         raise queue.Empty
                     reply_id, status, payload = self._out_q.get(timeout=remaining)
                 except queue.Empty as exc:
-                    raise KeywordError(
+                    raise KeywordTimeout(
                         f"Timed out after {timeout}s waiting for keyword '{name}' "
                         f"(it may still be running; its result will be discarded)"
                     ) from exc

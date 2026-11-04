@@ -14,9 +14,10 @@ from __future__ import annotations
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from robot.utils import escape as robot_escape
 
-from .bridge import KeywordError, RobotBridge
+from .bridge import KeywordError, KeywordTimeout, RobotBridge
 
 mcp = MCPServer("rf-browser-mcp")
 _bridge = RobotBridge()
@@ -56,17 +57,72 @@ def _args(*positional: Any, **named: Any) -> list[str]:
     return out
 
 
+# Short timeout for the quick state probes run after a failure.
+_PROBE_TIMEOUT_S = 5.0
+
+
+def _try(keyword: str, *positional: Any) -> tuple[bool, Any]:
+    """Run a keyword for inspection only: never raises, returns (ok, value)."""
+    try:
+        return True, _bridge.call_keyword(
+            f"Browser.{keyword}", _args(*positional), timeout=_PROBE_TIMEOUT_S
+        )
+    except KeywordError as exc:
+        return False, str(exc)
+
+
+def _page_state() -> dict[str, Any]:
+    """Best-effort snapshot of where the session actually is right now."""
+    ok, page_ids = _try("Get Page Ids")
+    if not ok or not page_ids:
+        return {"browser_open": False, "open_pages": 0, "url": None, "title": None}
+    _, url = _try("Get Url")
+    _, title = _try("Get Title")
+    return {
+        "browser_open": True,
+        "open_pages": len(page_ids),
+        "url": url,
+        "title": title,
+    }
+
+
+def _format_state(state: dict[str, Any]) -> str:
+    if not state["browser_open"]:
+        return "- no browser/page is open (call open_browser to start one)"
+    return (
+        f"- url: {state['url']}\n"
+        f"- title: {state['title']}\n"
+        f"- open pages: {state['open_pages']}"
+    )
+
+
 def _call(keyword: str, *positional: Any, _timeout: float | None = None, **named: Any) -> Any:
+    """Run a Browser keyword. On failure, raise ToolError (so the MCP result
+    is flagged isError) with Browser's real message plus a snapshot of the
+    page state *after* the failure, so the model re-plans from the actual
+    state instead of assuming the step succeeded or nothing changed."""
     try:
         return _bridge.call_keyword(
             f"Browser.{keyword}",
             _args(*positional, **named),
             timeout=_timeout or _DEFAULT_CALL_TIMEOUT_S,
         )
+    except KeywordTimeout as exc:
+        # The RF thread is still busy with this keyword, so probing the page
+        # now would just queue behind it -- report the state as unknown.
+        raise ToolError(
+            f"'{keyword}' failed: {exc}\n\n"
+            "Page state: UNKNOWN -- the keyword may still be running in the "
+            "browser. Call session_status before continuing, or reset_session "
+            "to start from a clean browser."
+        ) from exc
     except KeywordError as exc:
-        # Surface as a normal string result so the LLM sees the real RF/
-        # Browser-library error message instead of a raw exception.
-        return f"ERROR: {exc}"
+        raise ToolError(
+            f"'{keyword}' failed: {exc}\n\n"
+            "Page state after the failure (the page may be partially loaded "
+            "or unchanged -- verify before continuing):\n"
+            f"{_format_state(_page_state())}"
+        ) from exc
 
 
 # --- Browser / context / page lifecycle -----------------------------------
@@ -80,6 +136,26 @@ def open_browser(url: str | None = None, browser: str = "chromium", headless: bo
     """
     _call("New Browser", browser=browser, headless=headless)
     return _call("New Page", url)
+
+
+@mcp.tool()
+def session_status() -> Any:
+    """Report the real current state of the browser session: whether a
+    browser is open, how many pages, and the active page's URL and title.
+    Call this after any failed step before continuing."""
+    return _page_state()
+
+
+@mcp.tool()
+def reset_session(url: str | None = None, browser: str = "chromium", headless: bool = True) -> Any:
+    """Close every browser, context, and page, then (if url is given) start
+    a fresh browser on that URL. Use this to recover when the page state is
+    unreliable after a failure."""
+    _try("Close Browser", "ALL")
+    if url is None:
+        return _page_state()
+    open_browser(url=url, browser=browser, headless=headless)
+    return _page_state()
 
 
 @mcp.tool()
@@ -105,9 +181,12 @@ def close_browser() -> Any:
 
 
 @mcp.tool()
-def go_to(url: str) -> Any:
-    """Navigate the current page to the given URL."""
-    return _call("Go To", url)
+def go_to(url: str, timeout_s: float | None = None) -> Any:
+    """Navigate the current page to the given URL. Optional timeout_s
+    overrides the Browser library's default navigation timeout."""
+    timeout = f"{timeout_s} s" if timeout_s is not None else None
+    bridge_timeout = max(_DEFAULT_CALL_TIMEOUT_S, (timeout_s or 0) + 30)
+    return _call("Go To", url, timeout=timeout, _timeout=bridge_timeout)
 
 
 @mcp.tool()
