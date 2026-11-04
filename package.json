@@ -1,15 +1,15 @@
 {
   "name": "robotframework-mcp-server",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "MCP Server for Robot Framework test automation (Selenium and Playwright/Browser library backends)",
   "main": "bin/robotframework-mcp.js",
   "bin": {
-    "robotframework-mcp": "bin/robotframework-mcp.js"
+    "robotframework-mcp-server": "bin/robotframework-mcp.js"
   },
   "scripts": {
-      "start": "node bin/robotframework-mcp.js",
-     "test": "python3 mcp_server.py"
-},
+    "start": "node bin/robotframework-mcp.js",
+    "test": "python3 mcp_server.py"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/sourcefuse/robotframework-MCP.git"

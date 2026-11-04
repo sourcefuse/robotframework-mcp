@@ -205,13 +205,28 @@ Available only when the server is started with `--library=browser`. Each tool is
 |---|---|
 | **`open_browser(url, browser="chromium", headless=True)`** | Launch a browser (`chromium`, `firefox`, or `webkit`) |
 | **`new_page(url)`** / **`close_page()`** / **`close_browser()`** | Manage pages and the browser session |
-| **`go_to(url)`**, **`get_url()`**, **`get_title()`** | Navigation |
+| **`session_status()`** | Real current state: browser open?, open pages, active URL and title |
+| **`reset_session(url=None)`** | Close everything and optionally start a fresh browser on `url` — recover from an unreliable state |
+| **`go_to(url, timeout_s=None)`**, **`get_url()`**, **`get_title()`** | Navigation |
 | **`click(selector)`**, **`fill_text`**, **`type_text`**, **`clear_text`**, **`press_keys`** | Interactions |
 | **`check_checkbox`** / **`uncheck_checkbox`** / **`select_options_by`** | Form controls |
 | **`get_text`**, **`get_attribute`**, **`get_element_count`** | Reading page content |
 | **`wait_for_elements_state(selector, state="visible")`** | Wait for an element state |
 | **`take_screenshot`**, **`evaluate_javascript`** | Screenshots & JS |
 | **`run_keyword(name, args)`** | Escape hatch — run any Browser-library keyword by name |
+
+**When a step fails** (navigation timeout, missing element, bad argument…), the tool returns a proper MCP error (`isError: true`) containing Browser library's real message **plus a snapshot of the page state after the failure**, so the model re-plans from where the browser actually is instead of assuming the step worked:
+
+```text
+'Go To' failed: TimeoutError: page.goto: Timeout 3000ms exceeded.
+
+Page state after the failure (the page may be partially loaded or unchanged -- verify before continuing):
+- url: https://example.com/
+- title: Loading http://127.0.0.1:50315/
+- open pages: 1
+```
+
+If the server itself stops waiting on a keyword, the error says the state is **unknown** (the keyword may still be running) and points the model to `session_status` / `reset_session`.
 
 The following tools are available with the default `--library=selenium` backend:
 
