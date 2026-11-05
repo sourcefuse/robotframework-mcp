@@ -352,4 +352,4 @@ To contribute:
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-Copyright (c) 2025 Sourcefuse
+Copyright (c) 2026 Sourcefuse
