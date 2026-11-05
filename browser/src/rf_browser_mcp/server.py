@@ -11,16 +11,23 @@ type-conversion machinery handles the rest, including enums like
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
-from mcp.server.mcpserver import MCPServer
-from mcp.server.mcpserver.exceptions import ToolError
+try:  # mcp >= 2.0
+    from mcp.server.mcpserver import MCPServer
+    from mcp.server.mcpserver.exceptions import ToolError
+except ImportError:  # mcp 1.x (same API under its old name)
+    from mcp.server.fastmcp import FastMCP as MCPServer
+    from mcp.server.fastmcp.exceptions import ToolError
 from robot.utils import escape as robot_escape
 
 from .bridge import KeywordError, KeywordTimeout, RobotBridge
+from .recorder import SessionRecorder
 
 mcp = MCPServer("rf-browser-mcp")
 _bridge = RobotBridge()
+_recorder = SessionRecorder()
 
 # Default time to wait for one keyword's reply from the RF thread.
 _DEFAULT_CALL_TIMEOUT_S = 60.0
@@ -96,15 +103,26 @@ def _format_state(state: dict[str, Any]) -> str:
     )
 
 
-def _call(keyword: str, *positional: Any, _timeout: float | None = None, **named: Any) -> Any:
+def _call(
+    keyword: str,
+    *positional: Any,
+    _timeout: float | None = None,
+    _record: str = "action",
+    **named: Any,
+) -> Any:
     """Run a Browser keyword. On failure, raise ToolError (so the MCP result
     is flagged isError) with Browser's real message plus a snapshot of the
     page state *after* the failure, so the model re-plans from the actual
-    state instead of assuming the step succeeded or nothing changed."""
+    state instead of assuming the step succeeded or nothing changed.
+
+    _record controls what export_robot_test sees once the keyword passes:
+    "action" records it as a test step, "observe" records it as a commented
+    assertion with the value that was read. Failed calls are never recorded."""
+    rf_args = _args(*positional, **named)
     try:
-        return _bridge.call_keyword(
+        result = _bridge.call_keyword(
             f"Browser.{keyword}",
-            _args(*positional, **named),
+            rf_args,
             timeout=_timeout or _DEFAULT_CALL_TIMEOUT_S,
         )
     except KeywordTimeout as exc:
@@ -123,6 +141,11 @@ def _call(keyword: str, *positional: Any, _timeout: float | None = None, **named
             "or unchanged -- verify before continuing):\n"
             f"{_format_state(_page_state())}"
         ) from exc
+    if _record == "action":
+        _recorder.record(keyword, rf_args)
+    elif _record == "observe":
+        _recorder.observe(keyword, rf_args, result)
+    return result
 
 
 # --- Browser / context / page lifecycle -----------------------------------
@@ -150,8 +173,10 @@ def session_status() -> Any:
 def reset_session(url: str | None = None, browser: str = "chromium", headless: bool = True) -> Any:
     """Close every browser, context, and page, then (if url is given) start
     a fresh browser on that URL. Use this to recover when the page state is
-    unreliable after a failure."""
+    unreliable after a failure. Also clears the step recording, so
+    export_robot_test starts from the fresh browser."""
     _try("Close Browser", "ALL")
+    _recorder.clear()
     if url is None:
         return _page_state()
     open_browser(url=url, browser=browser, headless=headless)
@@ -192,13 +217,13 @@ def go_to(url: str, timeout_s: float | None = None) -> Any:
 @mcp.tool()
 def get_url() -> Any:
     """Return the current page URL."""
-    return _call("Get Url")
+    return _call("Get Url", _record="observe")
 
 
 @mcp.tool()
 def get_title() -> Any:
     """Return the current page title."""
-    return _call("Get Title")
+    return _call("Get Title", _record="observe")
 
 
 # --- Interaction -------------------------------------------------------------
@@ -264,20 +289,20 @@ def select_options_by(selector: str, values: list[str], attribute: str = "value"
 @mcp.tool()
 def get_text(selector: str) -> Any:
     """Return the text content of the element found by the given selector."""
-    return _call("Get Text", selector)
+    return _call("Get Text", selector, _record="observe")
 
 
 @mcp.tool()
 def get_attribute(selector: str, attribute: str) -> Any:
     """Return the value of the given HTML attribute of the element found by
     the given selector."""
-    return _call("Get Attribute", selector, attribute)
+    return _call("Get Attribute", selector, attribute, _record="observe")
 
 
 @mcp.tool()
 def get_element_count(selector: str) -> Any:
     """Return the number of elements matching the given selector."""
-    return _call("Get Element Count", selector)
+    return _call("Get Element Count", selector, _record="observe")
 
 
 # --- Waiting -------------------------------------------------------------------
@@ -338,6 +363,57 @@ def run_keyword(name: str, args: list[str] | None = None) -> Any:
         else:
             rf_args.append(arg)
     return _call(bare, *rf_args)
+
+
+# --- Exporting the session as a test ------------------------------------------
+
+
+@mcp.tool()
+def export_robot_test(
+    test_name: str = "Recorded Session",
+    path: str | None = None,
+    overwrite: bool = False,
+) -> str:
+    """Export the browser steps that actually ran and passed in this session
+    as a draft Robot Framework (.robot) test that a person can review.
+
+    Only keywords that succeeded are included, exactly as they were
+    executed. Failed attempts and state probes are left out. Values read
+    with get_text / get_url / get_title / get_attribute / get_element_count
+    appear as commented "==" assertions holding the observed value, so the
+    reviewer can choose which ones to keep. Typed values (including
+    passwords) are written as-is.
+
+    Returns the file content. If path is given, also writes it there
+    (relative paths resolve against the server's working directory);
+    an existing file is only replaced when overwrite is true."""
+    content = _recorder.render(test_name)
+    if path is None:
+        return content
+    target = Path(path).expanduser().resolve()
+    if target.exists() and not overwrite:
+        raise ToolError(f"{target} already exists. Pass overwrite=true to replace it.")
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    except OSError as exc:
+        raise ToolError(f"Could not write {target}: {exc}") from exc
+    return f"Saved {_recorder.action_count} steps to {target}\n\n{content}"
+
+
+@mcp.tool()
+def clear_recording() -> str:
+    """Throw away the steps recorded so far, so export_robot_test only
+    includes what runs from now on. Useful after exploring, before doing
+    the clean run you want to keep. The browser itself is not touched, so
+    the export will not include an open_browser step. Use reset_session(url)
+    instead to get a test that starts from a fresh browser."""
+    _recorder.clear()
+    return (
+        "Recording cleared. Steps from now on will be exported. The browser "
+        "is still open, so the exported test will not contain the "
+        "open_browser step. Use reset_session(url) if you want it included."
+    )
 
 
 def main() -> None:

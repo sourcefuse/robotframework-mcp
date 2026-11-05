@@ -3,7 +3,10 @@ import datetime
 from pathlib import Path
 from string import Template
 from urllib.parse import urlparse
-from mcp.server.fastmcp import FastMCP
+try:  # mcp >= 2.0 renamed FastMCP to MCPServer
+    from mcp.server.mcpserver import MCPServer as FastMCP
+except ImportError:  # mcp 1.x
+    from mcp.server.fastmcp import FastMCP
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options as ChromeOptions
@@ -1524,22 +1527,18 @@ def main():
     """Entry point for the Robot Framework MCP server"""
     import sys
     
-    # Only print startup messages if not in stdio mode
-    if len(sys.argv) > 1 and '--stdio' in sys.argv:
-        # Running in stdio mode (MCP client mode)
-        pass
-    else:
-        # Running in standalone mode
-        print("Starting Robot Framework MCP server...")
-        print("Available templates: appLocator, generic, bootstrap")
-        print("Features: Input validation, configurable selectors, syntax validation")
-        print("Advanced tools: API integration, data-driven testing, responsive testing")
+    # stdout is the MCP JSON-RPC channel, so diagnostics must go to stderr.
+    if '--stdio' not in sys.argv:
+        print("Starting Robot Framework MCP server...", file=sys.stderr)
+        print("Available templates: appLocator, generic, bootstrap", file=sys.stderr)
+        print("Features: Input validation, configurable selectors, syntax validation", file=sys.stderr)
+        print("Advanced tools: API integration, data-driven testing, responsive testing", file=sys.stderr)
 
     try:
         mcp.run()
     except Exception as e:
         if len(sys.argv) <= 1 or '--stdio' not in sys.argv:
-            print(f"Error starting Robot framework MCP server: {e}")
+            print(f"Error starting Robot framework MCP server: {e}", file=sys.stderr)
             import traceback
             traceback.print_exc()
         raise

@@ -59,7 +59,7 @@ This server has two interchangeable backends, selected with `--library`:
 - **`selenium`** (default) — SeleniumLibrary-based code generation + live browser control tools.
 - **`browser`** — Playwright-based Robot Framework [Browser library](https://robotframework-browser.org/) tools. Self-contained: on first run it creates its own `.venv` under `browser/` and runs `rfbrowser init` automatically (downloads Playwright browsers, one-time, a couple of minutes).
 
-> **`--library` support by install method:** the flag is only wired up through the Node entrypoint (`bin/robotframework-mcp.js`), so it works with **Method 1 (npx)** and the Node-wrapper variant of **Method 4**. **Method 2 (PyPI)**, **Method 3 (UV)**, and the plain `python mcp_server.py` variant of Method 4 call the Selenium backend directly and only support `selenium` — use Method 1 or the Method 4 Node wrapper if you want the Playwright/Browser library backend.
+> **`--library` support by install method:** works with **Method 1 (npx)**, **Method 2 (PyPI, with the `[browser]` extra)** and the Node-wrapper variant of **Method 4**. **Method 3 (UV)** and the plain `python mcp_server.py` variant of Method 4 run the Selenium backend only.
 
 ### Method 1: Using npx (Node.js Package Manager)
 
@@ -83,15 +83,18 @@ Add to your MCP client configuration (e.g., `mcp.json`) in your **VS code or VS 
 ```
 ### Method 2: Install from PyPI
 
-> Selenium backend only — `--library` is not supported here.
-
 ```bash
-# Install the package
+# SeleniumLibrary backend (default)
 pip3 install robotframework-mcp
-
-# Run the MCP server
 robotframework-mcp
+
+# Playwright / Browser library backend
+pip3 install "robotframework-mcp[browser]"
+robotframework-mcp --library=browser --setup   # one-time: downloads Playwright browsers
+robotframework-mcp --library=browser
 ```
+
+`pip3 install robotframework-mcp` installs only the Selenium dependencies. The `[browser]` extra adds the Playwright-based Browser library. If you installed without the extra, `robotframework-mcp --library=browser --setup` installs the Browser library into the same environment for you, then runs `rfbrowser init`. Run `--setup` once from a terminal before adding the server to your MCP client, because the first-time download can exceed the client's startup timeout.
 
 **For MCP Clients (VS code or VS code inside, etc.):**
 
@@ -100,6 +103,7 @@ robotframework-mcp
   "mcpServers": {
     "robotframework-mcp": {
       "command": "robotframework-mcp",
+      "args": ["--library=browser"],  //Optional- "selenium" (default) or "browser" (needs the [browser] extra)
       "type": "stdio"
     }
   }
@@ -214,6 +218,23 @@ Available only when the server is started with `--library=browser`. Each tool is
 | **`wait_for_elements_state(selector, state="visible")`** | Wait for an element state |
 | **`take_screenshot`**, **`evaluate_javascript`** | Screenshots & JS |
 | **`run_keyword(name, args)`** | Escape hatch — run any Browser-library keyword by name |
+| **`export_robot_test(test_name, path=None, overwrite=False)`** | Export the steps that ran and passed as a draft `.robot` test for review |
+| **`clear_recording()`** | Drop the steps recorded so far, so the export starts from now |
+
+**Turning an exploration into a reviewable test.** While the assistant drives the browser, every keyword that passes is recorded exactly as it ran. `export_robot_test` writes those steps into a draft `.robot` file. Failed attempts are left out, and values the assistant only read (`get_text`, `get_url`, …) appear as commented assertions holding the value it saw, so a reviewer chooses which checks to keep:
+
+```robotframework
+*** Test Cases ***
+Login Works
+    New Browser    browser=chromium    headless=True
+    New Page    https://example.com/login
+    Fill Text    id=user    meenu
+    Fill Text    id=pw    ${PASSWORD}    # typed values are recorded as-is: replace secrets
+    Click    id=go
+    # Get Text    id=h    ==    Welcome meenu
+```
+
+`reset_session` also clears the recording. Use `reset_session(url)` before the clean run you want to keep, so the test starts from a fresh browser.
 
 **When a step fails** (navigation timeout, missing element, bad argument…), the tool returns a proper MCP error (`isError: true`) containing Browser library's real message **plus a snapshot of the page state after the failure**, so the model re-plans from where the browser actually is instead of assuming the step worked:
 
